@@ -286,7 +286,7 @@ func convertToGo(value, dataType string) (driver.Value, error) {
 	return nil, fmt.Errorf("Type not supported: %s", dataType)
 }
 
-func convertToMonet(value driver.Value) (string, error) {
+func ConvertToMonet(value driver.Value) (string, error) {
 	t := reflect.TypeOf(value)
 	n := "nil"
 	if t != nil {

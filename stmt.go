@@ -105,7 +105,7 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 	b.WriteString(fmt.Sprintf("EXEC %d (", s.execId))
 
 	for i, v := range args {
-		str, err := convertToMonet(v)
+		str, err := ConvertToMonet(v)
 		if err != nil {
 			return "", nil
 		}
