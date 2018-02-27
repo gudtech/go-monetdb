@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -39,6 +40,7 @@ type description struct {
 }
 
 func newStmt(c *Conn, q string) *Stmt {
+	log.Printf("Monet query: '%s'", q)
 	s := &Stmt{
 		conn:   c,
 		query:  q,
