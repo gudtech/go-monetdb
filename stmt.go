@@ -160,8 +160,6 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 		return "", fmt.Errorf("Could not write file: %s", err)
 	}
 
-	log.Printf("Logged %s\n", marshalledQuery)
-
 	return s.conn.execute(b.String())
 }
 
