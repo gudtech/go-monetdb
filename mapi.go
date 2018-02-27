@@ -110,6 +110,7 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", err
 	}
 
+	log.Printf("block: %s\n", r)
 	resp := string(r)
 	if len(resp) == 0 {
 		return "", nil
