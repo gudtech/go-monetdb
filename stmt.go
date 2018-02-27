@@ -137,7 +137,7 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 		Args:  arguments,
 	}
 
-	fileBuffer, err := ioutil.ReadFile("~/queries.json")
+	fileBuffer, err := ioutil.ReadFile("/queries.json")
 	if err != nil {
 		return "", fmt.Errorf("Could not read file: %s", err)
 	}
@@ -155,10 +155,12 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 		return "", fmt.Errorf("Could not unmarshal file: %s", err)
 	}
 
-	err = ioutil.WriteFile("~/queries.json", marshalledQuery, 0644)
+	err = ioutil.WriteFile("/queries.json", marshalledQuery, 0644)
 	if err != nil {
 		return "", fmt.Errorf("Could not write file: %s", err)
 	}
+
+	log.Printf("Logged %s\n", marshalledQuery)
 
 	return s.conn.execute(b.String())
 }
