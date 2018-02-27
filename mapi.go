@@ -290,17 +290,19 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 			return nil, err
 		}
 
-		var unpacked uint16
-		buf := bytes.NewBuffer(flag)
-		err = binary.Read(buf, binary.LittleEndian, &unpacked)
+		//var unpacked uint16
+		//buf := bytes.NewBuffer(flag)
+		//err = binary.Read(buf, binary.LittleEndian, &unpacked)
+		unpacked := int(binary.LittleEndian.Uint16(flag))
+
 		if err != nil {
 			return nil, err
 		}
 
 		length := unpacked >> 1
-		last = int(unpacked & 1)
+		last = unpacked & 1
 
-		d, err := c.getBytes(int(length))
+		d, err := c.getBytes(length)
 		if err != nil {
 			return nil, err
 		}
