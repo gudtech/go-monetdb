@@ -40,7 +40,6 @@ type description struct {
 }
 
 func newStmt(c *Conn, q string) *Stmt {
-	log.Printf("Monet query: '%s'", q)
 	s := &Stmt{
 		conn:   c,
 		query:  q,
@@ -103,6 +102,8 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 		}
 	}
 
+	fullQuery := s.query
+
 	var b bytes.Buffer
 	b.WriteString(fmt.Sprintf("EXEC %d (", s.execId))
 
@@ -115,9 +116,12 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 			b.WriteString(", ")
 		}
 		b.WriteString(str)
+
+		fullQuery = strings.Replace(fullQuery, "?", str, 1)
 	}
 
 	b.WriteString(")")
+	log.Printf("monet exec: %s", fullQuery)
 	return s.conn.execute(b.String())
 }
 
@@ -143,6 +147,7 @@ func (s *Stmt) storeResult(r string) error {
 	for _, line := range strings.Split(r, "\n") {
 		if strings.HasPrefix(line, mapi_MSG_INFO) {
 			// TODO log
+			log.Printf("MSG_INFO: %s", line)
 
 		} else if strings.HasPrefix(line, mapi_MSG_QPREPARE) {
 			t := strings.Split(strings.TrimSpace(line[2:]), " ")
@@ -241,7 +246,7 @@ func (s *Stmt) storeResult(r string) error {
 		}
 	}
 
-	return fmt.Errorf("Unknown state: %s", r)
+	return fmt.Errorf("Unknown statement result state: %s", r)
 }
 
 func (s *Stmt) parseTuple(d string) ([]driver.Value, error) {
