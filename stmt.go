@@ -97,12 +97,12 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 }
 
 type QueryJson struct {
-	Query string        `json:"query"`
-	Args  []interface{} `json:"args"`
+	Query string        `json:"query,omitempty"`
+	Args  []interface{} `json:"args,omitempty"`
 }
 
 type QueryFile struct {
-	Queries []QueryJson `json:"queries"`
+	Queries []QueryJson `json:"queries,omitempty"`
 }
 
 func (s *Stmt) exec(args []driver.Value) (string, error) {
@@ -150,7 +150,7 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 
 	queries.Queries = append(queries.Queries, query)
 
-	marshalledQuery, err := json.Marshal(queries)
+	marshalledQuery, err := json.MarshalIndent(queries, "", "    ")
 	if err != nil {
 		return "", fmt.Errorf("Could not unmarshal file: %s", err)
 	}
