@@ -128,7 +128,7 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", fmt.Errorf("Operational error: %s", resp[1:])
 
 	} else {
-		return "", fmt.Errorf("Unknown state: %s", resp)
+		return "", fmt.Errorf("Unknown CMD state: %s", resp)
 	}
 }
 
@@ -225,7 +225,7 @@ func (c *MapiConn) tryLogin(iteration int) error {
 			return fmt.Errorf("Unknown redirect: %s", prompt)
 		}
 	} else {
-		return fmt.Errorf("Unknown state: %s", prompt)
+		return fmt.Errorf("Unknown prompt state: %s", prompt)
 	}
 
 	c.State = MAPI_STATE_READY
