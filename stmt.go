@@ -7,7 +7,9 @@ package monetdb
 import (
 	"bytes"
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
@@ -94,6 +96,15 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 	return rows, rows.err
 }
 
+type QueryJson struct {
+	Query string        `json:"query"`
+	Args  []interface{} `json:"args"`
+}
+
+type QueryFile struct {
+	Queries []QueryJson `json:"queries"`
+}
+
 func (s *Stmt) exec(args []driver.Value) (string, error) {
 	if s.execId == -1 {
 		err := s.prepareQuery()
@@ -102,8 +113,7 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 		}
 	}
 
-	fullQuery := s.query
-
+	var arguments []interface{}
 	var b bytes.Buffer
 	b.WriteString(fmt.Sprintf("EXEC %d (", s.execId))
 
@@ -117,11 +127,39 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 		}
 		b.WriteString(str)
 
-		fullQuery = strings.Replace(fullQuery, "?", str, 1)
+		arguments = append(arguments, v)
 	}
 
 	b.WriteString(")")
-	log.Printf("monet exec: %s", fullQuery)
+
+	query := QueryJson{
+		Query: s.query,
+		Args:  arguments,
+	}
+
+	fileBuffer, err := ioutil.ReadFile("~/queries.json")
+	if err != nil {
+		return "", fmt.Errorf("Could not read file: %s", err)
+	}
+
+	var queries QueryFile
+	err = json.Unmarshal(fileBuffer, &queries)
+	if err != nil {
+		return "", fmt.Errorf("Could not unmarshal file: %s", err)
+	}
+
+	queries.Queries = append(queries.Queries, query)
+
+	marshalledQuery, err := json.Marshal(queries)
+	if err != nil {
+		return "", fmt.Errorf("Could not unmarshal file: %s", err)
+	}
+
+	err = ioutil.WriteFile("~/queries.json", marshalledQuery, 0644)
+	if err != nil {
+		return "", fmt.Errorf("Could not write file: %s", err)
+	}
+
 	return s.conn.execute(b.String())
 }
 
