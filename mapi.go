@@ -293,7 +293,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 		//var unpacked uint16
 		//buf := bytes.NewBuffer(flag)
 		//err = binary.Read(buf, binary.LittleEndian, &unpacked)
-		unpacked := int(binary.LittleEndian.Uint16(flag))
+		unpacked := binary.LittleEndian.Uint16(flag)
 
 		if err != nil {
 			return nil, err
