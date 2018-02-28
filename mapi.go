@@ -102,7 +102,6 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", fmt.Errorf("Database not connected")
 	}
 
-	log.Printf("put")
 	if err := c.putBlock([]byte(operation)); err != nil {
 		return "", err
 	}
@@ -289,6 +288,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 
 	last := 0
 	for last != 1 {
+		log.Printf("get flag bytes")
 		flag, err := c.getBytes(2)
 		if err != nil {
 			return nil, err
@@ -306,6 +306,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 		length := unpacked >> 1
 		last = unpacked & 1
 
+		log.Printf("get bytes")
 		d, err := c.getBytes(length)
 		if err != nil {
 			return nil, err
