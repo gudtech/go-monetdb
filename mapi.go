@@ -102,15 +102,18 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", fmt.Errorf("Database not connected")
 	}
 
+	log.Printf("put")
 	if err := c.putBlock([]byte(operation)); err != nil {
 		return "", err
 	}
 
+	log.Printf("get")
 	r, err := c.getBlock()
 	if err != nil {
 		return "", err
 	}
 
+	log.Printf("process")
 	//log.Printf("block: %s\n", r)
 	resp := string(r)
 	if len(resp) == 0 {
