@@ -7,9 +7,9 @@ package monetdb
 import (
 	"bytes"
 	"database/sql/driver"
-	"encoding/json"
+	//"encoding/json"
 	"fmt"
-	"io/ioutil"
+	//"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
