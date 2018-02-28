@@ -132,33 +132,33 @@ func (s *Stmt) exec(args []driver.Value) (string, error) {
 
 	b.WriteString(")")
 
-	query := QueryJson{
-		Query: s.query,
-		Args:  arguments,
-	}
+	//query := QueryJson{
+	//Query: s.query,
+	//Args:  arguments,
+	//}
 
-	fileBuffer, err := ioutil.ReadFile("/queries.json")
-	if err != nil {
-		return "", fmt.Errorf("Could not read file: %s", err)
-	}
+	//fileBuffer, err := ioutil.ReadFile("/queries.json")
+	//if err != nil {
+	//return "", fmt.Errorf("Could not read file: %s", err)
+	//}
 
-	var queries QueryFile
-	err = json.Unmarshal(fileBuffer, &queries)
-	if err != nil {
-		return "", fmt.Errorf("Could not unmarshal file: %s", err)
-	}
+	//var queries QueryFile
+	//err = json.Unmarshal(fileBuffer, &queries)
+	//if err != nil {
+	//return "", fmt.Errorf("Could not unmarshal file: %s", err)
+	//}
 
-	queries.Queries = append(queries.Queries, query)
+	//queries.Queries = append(queries.Queries, query)
 
-	marshalledQuery, err := json.MarshalIndent(queries, "", "    ")
-	if err != nil {
-		return "", fmt.Errorf("Could not unmarshal file: %s", err)
-	}
+	//marshalledQuery, err := json.MarshalIndent(queries, "", "    ")
+	//if err != nil {
+	//return "", fmt.Errorf("Could not unmarshal file: %s", err)
+	//}
 
-	err = ioutil.WriteFile("/queries.json", marshalledQuery, 0644)
-	if err != nil {
-		return "", fmt.Errorf("Could not write file: %s", err)
-	}
+	//err = ioutil.WriteFile("/queries.json", marshalledQuery, 0644)
+	//if err != nil {
+	//return "", fmt.Errorf("Could not write file: %s", err)
+	//}
 
 	return s.conn.execute(b.String())
 }
