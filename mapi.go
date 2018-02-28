@@ -111,7 +111,7 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", err
 	}
 
-	log.Printf("block: %s\n", r)
+	//log.Printf("block: %s\n", r)
 	resp := string(r)
 	if len(resp) == 0 {
 		return "", nil
@@ -197,6 +197,7 @@ func (c *MapiConn) tryLogin(iteration int) error {
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_INFO) {
 		// TODO log info
+		log.Printf("Monet INFO: %s", prompt)
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_ERROR) {
 		// TODO log error
