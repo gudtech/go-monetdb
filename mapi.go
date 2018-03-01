@@ -18,6 +18,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -154,7 +155,7 @@ func (c *MapiConn) Connect() error {
 		return err
 	}
 
-	conn.SetKeepAlive(false)
+	conn.SetKeepAlive(true)
 	conn.SetNoDelay(true)
 	c.conn = conn
 
@@ -325,6 +326,7 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 
 	read := 0
 	for read < count {
+		c.conn.SetDeadline(time.Now().Add(10 * time.Second))
 		n, err := c.conn.Read(b)
 		if err != nil {
 			return nil, err
