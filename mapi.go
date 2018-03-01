@@ -335,7 +335,7 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 		read += n
 	}
 
-	log.Printf("took %d chunks")
+	log.Printf("took %d chunks to read %d", chunks, count)
 
 	return r, nil
 }
