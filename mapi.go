@@ -113,7 +113,6 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", err
 	}
 
-	//log.Printf("block: %s\n", r)
 	resp := string(r)
 	if len(resp) == 0 {
 		return "", nil
@@ -302,7 +301,6 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 
 	last := 0
 	for last != 1 {
-		log.Printf("get flag bytes")
 		flag, err := c.getBytes(2)
 		if err != nil {
 			return nil, err
@@ -320,7 +318,6 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 		length := unpacked >> 1
 		last = unpacked & 1
 
-		log.Printf("get bytes")
 		d, err := c.getBytes(length)
 		if err != nil {
 			return nil, err
