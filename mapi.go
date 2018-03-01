@@ -107,13 +107,11 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", err
 	}
 
-	log.Printf("get")
 	r, err := c.getBlock()
 	if err != nil {
 		return "", err
 	}
 
-	log.Printf("process")
 	//log.Printf("block: %s\n", r)
 	resp := string(r)
 	if len(resp) == 0 {
@@ -324,8 +322,10 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 	r := make([]byte, count)
 	b := make([]byte, count)
 
+	chunks := 0
 	read := 0
 	for read < count {
+		chunks += 1
 		c.conn.SetDeadline(time.Now().Add(10 * time.Second))
 		n, err := c.conn.Read(b)
 		if err != nil {
@@ -334,6 +334,8 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 		copy(r[read:], b[:n])
 		read += n
 	}
+
+	log.Printf("took %d chunks")
 
 	return r, nil
 }
