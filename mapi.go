@@ -24,20 +24,21 @@ import (
 const (
 	mapi_MAX_PACKAGE_LENGTH = (1024 * 8) - 2
 
-	mapi_MSG_PROMPT   = ""
-	mapi_MSG_INFO     = "#"
-	mapi_MSG_ERROR    = "!"
-	mapi_MSG_Q        = "&"
-	mapi_MSG_QTABLE   = "&1"
-	mapi_MSG_QUPDATE  = "&2"
-	mapi_MSG_QSCHEMA  = "&3"
-	mapi_MSG_QTRANS   = "&4"
-	mapi_MSG_QPREPARE = "&5"
-	mapi_MSG_QBLOCK   = "&6"
-	mapi_MSG_HEADER   = "%"
-	mapi_MSG_TUPLE    = "["
-	mapi_MSG_REDIRECT = "^"
-	mapi_MSG_OK       = "=OK"
+	mapi_MSG_PROMPT        = ""
+	mapi_MSG_INFO          = "#"
+	mapi_MSG_ERROR         = "!"
+	mapi_MSG_Q             = "&"
+	mapi_MSG_QTABLE        = "&1"
+	mapi_MSG_QUPDATE       = "&2"
+	mapi_MSG_QSCHEMA       = "&3"
+	mapi_MSG_QTRANS        = "&4"
+	mapi_MSG_QPREPARE      = "&5"
+	mapi_MSG_QBLOCK        = "&6"
+	mapi_MSG_HEADER        = "%"
+	mapi_MSG_TUPLE         = "["
+	mapi_MSG_TUPLE_NOSLICE = "="
+	mapi_MSG_REDIRECT      = "^"
+	mapi_MSG_OK            = "=OK"
 )
 
 // MAPI connection is established.
@@ -123,12 +124,26 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 	} else if resp == mapi_MSG_MORE {
 		// tell server it isn't going to get more
 		return c.Cmd("")
+	}
 
-	} else if strings.HasPrefix(resp, mapi_MSG_Q) || strings.HasPrefix(resp, mapi_MSG_HEADER) || strings.HasPrefix(resp, mapi_MSG_TUPLE) {
+	if resp[:2] == mapi_MSG_QUPDATE {
+		lines := strings.Split(resp, "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, mapi_MSG_ERROR) {
+				return "", fmt.Errorf("QUPDATE error: %s", line[1:])
+			}
+		}
+	}
+
+	if strings.HasPrefix(resp, mapi_MSG_Q) || strings.HasPrefix(resp, mapi_MSG_HEADER) || strings.HasPrefix(resp, mapi_MSG_TUPLE) {
 		return resp, nil
 
 	} else if strings.HasPrefix(resp, mapi_MSG_ERROR) {
 		return "", fmt.Errorf("Operational error: %s", resp[1:])
+
+	} else if strings.HasPrefix(resp, mapi_MSG_INFO) {
+		log.Printf("Monet INFO: %s", resp[1:])
+		return resp[1:], nil
 
 	} else {
 		return "", fmt.Errorf("Unknown CMD state: %s", resp)
@@ -153,7 +168,7 @@ func (c *MapiConn) Connect() error {
 		return err
 	}
 
-	conn.SetKeepAlive(true)
+	conn.SetKeepAlive(false)
 	conn.SetNoDelay(true)
 	c.conn = conn
 
@@ -283,7 +298,7 @@ func (c *MapiConn) challengeResponse(challenge []byte) (string, error) {
 
 // getBlock retrieves a block of message
 func (c *MapiConn) getBlock() ([]byte, error) {
-	r := new(bytes.Buffer)
+	var r bytes.Buffer
 
 	last := 0
 	for last != 1 {
@@ -319,25 +334,24 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 
 // getBytes reads the given amount of bytes
 func (c *MapiConn) getBytes(count int) ([]byte, error) {
-	r := make([]byte, count)
-	b := make([]byte, count)
+	var r bytes.Buffer
+	r.Grow(count)
 
-	chunks := 0
 	read := 0
 	for read < count {
-		chunks += 1
+		b := make([]byte, count-read)
+
 		c.conn.SetDeadline(time.Now().Add(10 * time.Second))
 		n, err := c.conn.Read(b)
 		if err != nil {
 			return nil, err
 		}
-		copy(r[read:], b[:n])
+		//copy(r[read:], b[:n])
+		r.Write(b)
 		read += n
 	}
 
-	log.Printf("took %d chunks to read %d", chunks, count)
-
-	return r, nil
+	return r.Bytes(), nil
 }
 
 // putBlock sends the given data as one or more blocks
