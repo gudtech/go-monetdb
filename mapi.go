@@ -16,6 +16,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -309,11 +310,11 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 		//var unpacked uint16
 		//buf := bytes.NewBuffer(flag)
 		//err = binary.Read(buf, binary.LittleEndian, &unpacked)
-		unpacked := int(binary.LittleEndian.Uint16(flag))
+		//if err != nil {
+		//return nil, err
+		//}
 
-		if err != nil {
-			return nil, err
-		}
+		unpacked := int(binary.LittleEndian.Uint16(flag))
 
 		length := unpacked >> 1
 		last = unpacked & 1
@@ -338,9 +339,11 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 	for read < count {
 		b := make([]byte, count-read)
 
-		c.conn.SetDeadline(time.Now().Add(30 * time.Second))
+		c.conn.SetDeadline(time.Now().Add(15 * time.Second))
 		n, err := c.conn.Read(b)
 		if err != nil {
+			r.Write(b)
+			log.Fatalf("Failed to read, buffer:\n '%s'\n", r.String())
 			return nil, err
 		}
 		//copy(r[read:], b[:n])
