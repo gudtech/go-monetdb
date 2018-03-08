@@ -184,8 +184,7 @@ func (s *Stmt) storeResult(r string) error {
 
 	for _, line := range strings.Split(r, "\n") {
 		if strings.HasPrefix(line, mapi_MSG_INFO) {
-			// TODO log
-			log.Printf("MSG_INFO: %s", line)
+			log.Printf("MAPI Stmt INFO: %s\n", line[1:])
 
 		} else if strings.HasPrefix(line, mapi_MSG_QPREPARE) {
 			t := strings.Split(strings.TrimSpace(line[2:]), " ")

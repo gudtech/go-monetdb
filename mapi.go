@@ -16,7 +16,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -212,11 +211,10 @@ func (c *MapiConn) tryLogin(iteration int) error {
 		// pass
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_INFO) {
-		// TODO log info
-		log.Printf("Monet INFO: %s", prompt)
+		log.Printf("MAPI INFO: %s\n", prompt[1:])
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_ERROR) {
-		// TODO log error
+		log.Fatalf("MAPI ERROR: %s\n", prompt[1:])
 		return fmt.Errorf("Database error: %s", prompt[1:])
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_REDIRECT) {
