@@ -341,7 +341,7 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 		n, err := c.conn.Read(b)
 		if err != nil {
 			r.Write(b)
-			log.Fatalf("Failed to read, buffer:\n '%s'\n", r.String())
+			log.Printf("Failed to read, buffer: '%s'\n", r.String())
 			return nil, err
 		}
 		//copy(r[read:], b[:n])
