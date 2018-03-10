@@ -214,7 +214,7 @@ func (c *MapiConn) tryLogin(iteration int) error {
 		log.Printf("MAPI INFO: %s\n", prompt[1:])
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_ERROR) {
-		log.Fatalf("MAPI ERROR: %s\n", prompt[1:])
+		log.Printf("MAPI ERROR: %s\n", prompt[1:])
 		return fmt.Errorf("Database error: %s", prompt[1:])
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_REDIRECT) {
@@ -319,6 +319,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 
 		d, err := c.getBytes(length)
 		if err != nil {
+			log.Printf("Failed, buffer: '%s'", r.String())
 			return nil, err
 		}
 
