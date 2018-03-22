@@ -302,6 +302,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 	for last != 1 {
 		flag, err := c.getBytes(2)
 		if err != nil {
+			log.Printf("Getting flag: err: '%s', buffer: '%s'", err, r.String())
 			return nil, err
 		}
 
@@ -319,7 +320,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 
 		d, err := c.getBytes(length)
 		if err != nil {
-			log.Printf("Failed, buffer: '%s'", r.String())
+			log.Printf("Get buffer, err: '%s', buffer: '%s'", err, r.String())
 			return nil, err
 		}
 
@@ -331,8 +332,8 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 
 // getBytes reads the given amount of bytes
 func (c *MapiConn) getBytes(count int) ([]byte, error) {
-	var r bytes.Buffer
-	r.Grow(count)
+	r := new(bytes.Buffer)
+	//r.Grow(count)
 
 	read := 0
 	for read < count {
@@ -342,7 +343,6 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 		n, err := c.conn.Read(b)
 		if err != nil {
 			r.Write(b)
-			log.Printf("Failed to read, buffer: '%s'\n", r.String())
 			return nil, err
 		}
 		//copy(r[read:], b[:n])

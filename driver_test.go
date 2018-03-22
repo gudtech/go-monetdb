@@ -49,7 +49,7 @@ func TestParseDSN(t *testing.T) {
 			t.Errorf("Invalid hostname: %s, expected: %s", c.Hostname, tc[3])
 		}
 		if c.Port != port {
-			t.Errorf("Invalid port: %s, expected: %s", c.Port, port)
+			t.Errorf("Invalid port: %d, expected: %d", c.Port, port)
 		}
 		if c.Database != tc[5] {
 			t.Errorf("Invalid database: %s, expected: %s", c.Database, tc[5])

@@ -40,7 +40,7 @@ func TestConvertToMonet(t *testing.T) {
 	}
 
 	for _, c := range tcs {
-		s, err := convertToMonet(c.v)
+		s, err := ConvertToMonet(c.v)
 		if err != nil {
 			t.Errorf("Error converting value: %v -> %v", c.v, err)
 		} else if s != c.e {
