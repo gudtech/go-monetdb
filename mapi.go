@@ -170,7 +170,8 @@ func (c *MapiConn) Connect() error {
 		return err
 	}
 
-	conn.SetKeepAlive(false)
+	conn.SetKeepAlive(true)
+	//conn.SetKeepAlive(false)
 	conn.SetNoDelay(true)
 	c.conn = conn
 
