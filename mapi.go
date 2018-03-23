@@ -106,11 +106,13 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 
 	//log.Printf("Putting block '%s'\n", operation)
 	if err := c.putBlock([]byte(operation)); err != nil {
+		log.Printf("Failed to put block for operation: '%s", operation)
 		return "", err
 	}
 
 	r, err := c.getBlock()
 	if err != nil {
+		log.Printf("Failed to get block for operatio: '%s'", operation)
 		return "", err
 	}
 
