@@ -217,10 +217,10 @@ func (c *MapiConn) tryLogin(iteration int) error {
 		// pass
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_INFO) {
-		log.Printf("MAPI INFO: %s\n", prompt[1:])
+		log.Printf("MAPI: info: %s\n", prompt[1:])
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_ERROR) {
-		log.Printf("MAPI ERROR: %s\n", prompt[1:])
+		log.Printf("MAPI: error: %s\n", prompt[1:])
 		return fmt.Errorf("Database error: %s", prompt[1:])
 
 	} else if strings.HasPrefix(prompt, mapi_MSG_REDIRECT) {
@@ -241,6 +241,7 @@ func (c *MapiConn) tryLogin(iteration int) error {
 			port, _ := strconv.ParseInt(t[0], 10, 32)
 			c.Port = int(port)
 			c.Database = t[1]
+			log.Printf("MAPI: Redirect to %s:%s/%s, r[3]: %s", c.Hostname, c.Port, c.Database, r[3])
 			c.conn.Close()
 			c.Connect()
 
