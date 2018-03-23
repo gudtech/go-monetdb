@@ -104,6 +104,7 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", fmt.Errorf("Database not connected")
 	}
 
+	//log.Printf("Putting block '%s'\n", operation)
 	if err := c.putBlock([]byte(operation)); err != nil {
 		return "", err
 	}
@@ -188,19 +189,22 @@ func (c *MapiConn) login() error {
 func (c *MapiConn) tryLogin(iteration int) error {
 	challenge, err := c.getBlock()
 	if err != nil {
-		return err
+		return fmt.Errorf("challenge response get block: %s", err)
 	}
 
 	response, err := c.challengeResponse(challenge)
 	if err != nil {
-		return err
+		return fmt.Errorf("challenge response: %s", err)
 	}
 
-	c.putBlock([]byte(response))
+	err = c.putBlock([]byte(response))
+	if err != nil {
+		return fmt.Errorf("challenge response put block: %s", err)
+	}
 
 	bprompt, err := c.getBlock()
 	if err != nil {
-		return nil
+		return fmt.Errorf("get prompt: %s", err)
 	}
 
 	prompt := strings.TrimSpace(string(bprompt))
@@ -302,7 +306,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 	for last != 1 {
 		flag, err := c.getBytes(2)
 		if err != nil {
-			log.Printf("Getting flag: err: '%s', buffer: '%s'", err, r.String())
+			log.Printf("Getting flag: err: '%s', buffer: '%s'\n", err, r.String())
 			return nil, err
 		}
 
@@ -320,7 +324,7 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 
 		d, err := c.getBytes(length)
 		if err != nil {
-			log.Printf("Get buffer, err: '%s', buffer: '%s'", err, r.String())
+			log.Printf("Get buffer, err: '%s', buffer: '%s'\n", err, r.String())
 			return nil, err
 		}
 
