@@ -98,26 +98,32 @@ func (c *MapiConn) Disconnect() {
 	}
 }
 
+func truncateString(str string, num int) string {
+	newStr := str
+	if len(str) > num {
+		if num > 3 {
+			num -= 3
+		}
+		newStr = str[0:num] + "..."
+	}
+	return newStr
+}
+
 // Cmd sends a MAPI command to MonetDB.
 func (c *MapiConn) Cmd(operation string) (string, error) {
 	if c.State != MAPI_STATE_READY {
 		return "", fmt.Errorf("Database not connected")
 	}
 
-	opEnd := len(operation)
-	if opEnd > 150 {
-		opEnd = 150
-	}
-
 	//log.Printf("Putting block '%s'\n", operation)
 	if err := c.putBlock([]byte(operation)); err != nil {
-		log.Printf("Failed to put block for operation: '%s'", operation[:opEnd])
+		log.Printf("Failed to put block for operation: '%s'", truncateString(operation, 150))
 		return "", err
 	}
 
 	r, err := c.getBlock()
 	if err != nil {
-		log.Printf("Failed to get block for operation: '%s'", operation[:opEnd])
+		log.Printf("Failed to get block for operation: '%s'", truncateString(operation, 150))
 		return "", err
 	}
 
