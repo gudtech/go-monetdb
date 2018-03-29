@@ -104,15 +104,20 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 		return "", fmt.Errorf("Database not connected")
 	}
 
+	opEnd := len(operation)
+	if opEnd > 150 {
+		opEnd = 150
+	}
+
 	//log.Printf("Putting block '%s'\n", operation)
 	if err := c.putBlock([]byte(operation)); err != nil {
-		log.Printf("Failed to put block for operation: '%s'", operation[:100])
+		log.Printf("Failed to put block for operation: '%s'", operation[:opEnd])
 		return "", err
 	}
 
 	r, err := c.getBlock()
 	if err != nil {
-		log.Printf("Failed to get block for operation: '%s'", operation[:100])
+		log.Printf("Failed to get block for operation: '%s'", operation[:opEnd])
 		return "", err
 	}
 
