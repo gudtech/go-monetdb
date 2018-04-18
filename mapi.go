@@ -166,8 +166,7 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 // Connect starts a MAPI connection to MonetDB server.
 func (c *MapiConn) Connect() error {
 	if c.conn != nil {
-		c.conn.Close()
-		c.conn = nil
+		c.Disconnect()
 	}
 
 	addr := fmt.Sprintf("%s:%d", c.Hostname, c.Port)
@@ -181,7 +180,6 @@ func (c *MapiConn) Connect() error {
 		return err
 	}
 
-	//conn.SetKeepAlive(true)
 	conn.SetKeepAlive(false)
 	conn.SetNoDelay(true)
 	c.conn = conn
@@ -242,7 +240,7 @@ func (c *MapiConn) tryLogin(iteration int) error {
 		if r[1] == "merovingian" {
 			// restart auth
 			if iteration <= 10 {
-				c.tryLogin(iteration + 1)
+				return c.tryLogin(iteration + 1)
 			} else {
 				return fmt.Errorf("Maximal number of redirects reached (10)")
 			}
@@ -250,12 +248,15 @@ func (c *MapiConn) tryLogin(iteration int) error {
 		} else if r[1] == "monetdb" {
 			c.Hostname = r[2][2:]
 			t = strings.Split(r[3], "/")
-			port, _ := strconv.ParseInt(t[0], 10, 32)
+			port, err := strconv.ParseInt(t[0], 10, 32)
+			if err != nil {
+				return err
+			}
+
 			c.Port = int(port)
 			c.Database = t[1]
-			log.Printf("MAPI: Redirect to %s:%s/%s, r[3]: %s", c.Hostname, c.Port, c.Database, r[3])
-			c.conn.Close()
-			c.Connect()
+			log.Printf("MAPI: Redirect to %s:%d/%s, r[3]: %s", c.Hostname, c.Port, c.Database, r[3])
+			return c.Connect()
 
 		} else {
 			return fmt.Errorf("Unknown redirect: %s", prompt)
@@ -265,7 +266,6 @@ func (c *MapiConn) tryLogin(iteration int) error {
 	}
 
 	c.State = MAPI_STATE_READY
-
 	return nil
 }
 
