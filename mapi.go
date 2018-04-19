@@ -165,6 +165,23 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 
 // Connect starts a MAPI connection to MonetDB server.
 func (c *MapiConn) Connect() error {
+	var err error
+
+	tries := 0
+	maxTries := 10
+	for tries < maxTries {
+		tries += 1
+
+		err = c.tryConnect()
+		if err == nil {
+			break
+		}
+	}
+
+	return err
+}
+
+func (c *MapiConn) tryConnect() error {
 	if c.conn != nil {
 		c.Disconnect()
 	}
