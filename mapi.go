@@ -172,12 +172,12 @@ func (c *MapiConn) Connect() error {
 	addr := fmt.Sprintf("%s:%d", c.Hostname, c.Port)
 	raddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve monet tcp addr %s: %s", addr, err)
 	}
 
 	conn, err := net.DialTCP("tcp", nil, raddr)
 	if err != nil {
-		return err
+		return fmt.Errorf("dial monet tcp addr %s: %s", addr, err)
 	}
 
 	conn.SetKeepAlive(false)
@@ -321,26 +321,22 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 	for last != 1 {
 		flag, err := c.getBytes(2)
 		if err != nil {
-			log.Printf("Getting flag: err: '%s', buffer: '%s'\n", err, r.String())
-			return nil, err
+			return nil, fmt.Errorf("getting flag: %s", err)
 		}
 
-		//var unpacked uint16
-		//buf := bytes.NewBuffer(flag)
-		//err = binary.Read(buf, binary.LittleEndian, &unpacked)
-		//if err != nil {
-		//return nil, err
-		//}
-
-		unpacked := int(binary.LittleEndian.Uint16(flag))
+		var unpacked uint16
+		buf := bytes.NewBuffer(flag)
+		err = binary.Read(buf, binary.LittleEndian, &unpacked)
+		if err != nil {
+			return nil, fmt.Errorf("unpacking flag: %s", err)
+		}
 
 		length := unpacked >> 1
-		last = unpacked & 1
+		last = int(unpacked & 1)
 
-		d, err := c.getBytes(length)
+		d, err := c.getBytes(int(length))
 		if err != nil {
-			log.Printf("Get buffer, err: '%s', buffer: '%s'\n", err, r.String())
-			return nil, err
+			return nil, fmt.Errorf("getting %d bytes: %s", length, err)
 		}
 
 		r.Write(d)
@@ -390,13 +386,16 @@ func (c *MapiConn) putBlock(b []byte) error {
 		var packed uint16
 		packed = uint16((length << 1) + last)
 		flag := new(bytes.Buffer)
-		binary.Write(flag, binary.LittleEndian, packed)
+		err := binary.Write(flag, binary.LittleEndian, packed)
+		if err != nil {
+			return fmt.Errorf("pack flag: %s", err)
+		}
 
 		if _, err := c.conn.Write(flag.Bytes()); err != nil {
-			return err
+			return fmt.Errorf("write flag: %s", err)
 		}
 		if _, err := c.conn.Write(data); err != nil {
-			return err
+			return fmt.Errorf("write data: %s", err)
 		}
 
 		pos += length
