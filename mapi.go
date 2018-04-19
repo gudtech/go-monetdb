@@ -354,7 +354,7 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 	for read < count {
 		b := make([]byte, count-read)
 
-		c.conn.SetDeadline(time.Now().Add(120 * time.Second))
+		c.conn.SetDeadline(time.Now().Add(30 * time.Second))
 		n, err := c.conn.Read(b)
 		if err != nil {
 			r.Write(b)
