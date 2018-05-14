@@ -96,69 +96,36 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 	return rows, rows.err
 }
 
-type QueryJson struct {
-	Query string        `json:"query,omitempty"`
-	Args  []interface{} `json:"args,omitempty"`
-}
-
-type QueryFile struct {
-	Queries []QueryJson `json:"queries,omitempty"`
-}
-
 func (s *Stmt) exec(args []driver.Value) (string, error) {
-	if s.execId == -1 {
-		err := s.prepareQuery()
-		if err != nil {
-			return "", err
-		}
-	}
-
-	var arguments []interface{}
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("EXEC %d (", s.execId))
-
-	for i, v := range args {
-		str, err := ConvertToMonet(v)
-		if err != nil {
-			return "", nil
+	if len(args) == 0 {
+		b.WriteString(s.query)
+	} else {
+		if s.execId == -1 {
+			err := s.prepareQuery()
+			if err != nil {
+				return "", err
+			}
 		}
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString(str)
 
-		arguments = append(arguments, v)
+		var arguments []interface{}
+		b.WriteString(fmt.Sprintf("EXEC %d (", s.execId))
+
+		for i, v := range args {
+			str, err := ConvertToMonet(v)
+			if err != nil {
+				return "", nil
+			}
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(str)
+
+			arguments = append(arguments, v)
+		}
+
+		b.WriteString(")")
 	}
-
-	b.WriteString(")")
-
-	//query := QueryJson{
-	//Query: s.query,
-	//Args:  arguments,
-	//}
-
-	//fileBuffer, err := ioutil.ReadFile("/queries.json")
-	//if err != nil {
-	//return "", fmt.Errorf("Could not read file: %s", err)
-	//}
-
-	//var queries QueryFile
-	//err = json.Unmarshal(fileBuffer, &queries)
-	//if err != nil {
-	//return "", fmt.Errorf("Could not unmarshal file: %s", err)
-	//}
-
-	//queries.Queries = append(queries.Queries, query)
-
-	//marshalledQuery, err := json.MarshalIndent(queries, "", "    ")
-	//if err != nil {
-	//return "", fmt.Errorf("Could not unmarshal file: %s", err)
-	//}
-
-	//err = ioutil.WriteFile("/queries.json", marshalledQuery, 0644)
-	//if err != nil {
-	//return "", fmt.Errorf("Could not write file: %s", err)
-	//}
 
 	return s.conn.execute(b.String())
 }
