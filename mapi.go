@@ -197,7 +197,7 @@ func (c *MapiConn) tryConnect() error {
 		return fmt.Errorf("dial monet tcp addr %s: %s", addr, err)
 	}
 
-	conn.SetKeepAlive(false)
+	conn.SetKeepAlive(true)
 	conn.SetNoDelay(true)
 	c.conn = conn
 
@@ -385,8 +385,28 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 	return r.Bytes(), nil
 }
 
+func (c *MapiConn) ping() error {
+	one := []byte{}
+	c.conn.SetReadDeadline(time.Now())
+	_, err := c.conn.Read(one)
+
+	closed := false
+	if err == io.EOF {
+		closed = true
+	} else if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+		closed = true
+	}
+
+	return c.Connect()
+}
+
 // putBlock sends the given data as one or more blocks
 func (c *MapiConn) putBlock(b []byte) error {
+	//err := c.ping()
+	//if err != nil {
+	//return err
+	//}
+
 	pos := 0
 	last := 0
 	for last != 1 {
