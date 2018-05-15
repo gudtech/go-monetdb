@@ -397,7 +397,11 @@ func (c *MapiConn) ping() error {
 		closed = true
 	}
 
-	return c.Connect()
+	if closed {
+		return c.Connect()
+	}
+
+	return nil
 }
 
 // putBlock sends the given data as one or more blocks
