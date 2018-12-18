@@ -232,8 +232,8 @@ func toString(v driver.Value) (string, error) {
 func toQuotedString(v driver.Value) (string, error) {
 	s := fmt.Sprintf("%v", v)
 	s = strings.Replace(s, "\\", "\\\\", -1)
-	s = strings.Replace(s, "'", "\\'", -1)
-	return fmt.Sprintf("'%v'", s), nil
+	s = strings.Replace(s, "\"", "\\\"", -1)
+	return fmt.Sprintf("\"%v\"", s), nil
 }
 
 func toNull(v driver.Value) (string, error) {

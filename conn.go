@@ -6,6 +6,9 @@ package monetdb
 
 import (
 	"database/sql/driver"
+	"strconv"
+	"os"
+	"log"
 	"fmt"
 	"strings"
 )
@@ -65,27 +68,77 @@ func (c *Conn) execute(q string) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *Conn) CopyInto(tableName string, channel chan []interface{}, rowCount int64) error {
+func (c *Conn) CopyInto(tableName string, columns []string, channel chan []interface{}, rowCount int64) error {
 	if rowCount == 0 {
 		return fmt.Errorf("no rows")
 	}
+
+	fmt.Printf("row count: %d\n", rowCount)
 
 	if c.mapi.State != MAPI_STATE_READY {
 		return fmt.Errorf("Database not connected")
 	}
 
+	fmt.Printf("mapi state ready\n")
 	//var monetNull string = "mtwFTyme5SWmzgokt8Npopvr26XyaX7"
 	var monetNull string = "NULL"
-	query := fmt.Sprintf("COPY %d RECORDS INTO %s FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS '%s' LOCKED", rowCount, tableName, monetNull)
+	query := fmt.Sprintf("sCOPY %d RECORDS INTO %s FROM STDIN (%s) USING DELIMITERS ',','\\n','\\\"' NULL AS '%s';", rowCount, tableName, strings.Join(columns, ", "), monetNull)
 
+	fmt.Printf("put query: %s\n", query)
 	if err := c.mapi.putBlock([]byte(query)); err != nil {
 		return err
 	}
 
+	streamEnded := make(chan error)
+	go func() {
+		defer func() {
+			close(streamEnded)
+		}()
+
+		for {
+			resp, err := c.handleGetBlock()
+			if err != nil {
+				streamEnded <- err
+				break
+			}
+
+			if resp != "" {
+				values := strings.Split(resp, " ")
+				integer, err := strconv.Atoi(values[1])
+				if err != nil {
+					fmt.Printf("could not cast row count to integer (%s): %s\n", values[1], err)
+				}
+
+				if int64(integer) != rowCount {
+					fmt.Printf("\n\n!!!!!!!!!!!! ERROR: rowCount not the same as affected rows !!!!!!!!!!!!\n\n")
+				} else {
+					fmt.Printf("!!!!!!!!!!! probably fine !!!!!!!!!!!!!!!!!\n")
+				}
+
+				streamEnded <- nil
+				break
+			}
+		}
+	}()
+
+	counter := 0
+
+Receiving:
 	for {
-		row, more := <-channel
-		if !more {
-			break
+		//fmt.Printf("receiving from channel\n")
+		var row []interface{}
+		var more bool
+
+		select {
+		case row, more = <-channel:
+			//fmt.Printf("got from channel\n")
+			if !more {
+				//fmt.Printf("channel closed\n")
+				break Receiving
+			}
+		case err, _ := <-streamEnded:
+			//fmt.Printf("stream ended\n")
+			return err
 		}
 
 		var convertedValues []string
@@ -95,18 +148,70 @@ func (c *Conn) CopyInto(tableName string, channel chan []interface{}, rowCount i
 				return fmt.Errorf("conversion: %s", err)
 			}
 
+			//converted = strings.Replace(converted, "|", "", -1)
 			convertedValues = append(convertedValues, converted)
 		}
 
 		block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
+		//fmt.Printf("putting block: %s\n", block)
+		counter += 1
+		if counter % 500 == 0 {
+			fmt.Fprintf(os.Stderr, "count: %d/%d\n", counter, rowCount)
+		}
+
 		if err := c.mapi.putBlock([]byte(block)); err != nil {
 			return err
 		}
 	}
 
+	fmt.Printf("done\n")
 	if err := c.mapi.putBlock([]byte("\x0D")); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (c *Conn) handleGetBlock() (string, error) {
+	r, err := c.mapi.getBlock()
+	if err != nil {
+		return "", err
+	}
+
+	//fmt.Printf("block: %s\n", r)
+
+	resp := string(r)
+	if len(resp) == 0 {
+		return "", nil
+
+	} else if strings.HasPrefix(resp, mapi_MSG_OK) {
+		return "", nil
+
+	} else if resp == mapi_MSG_MORE {
+		// tell server it isn't going to get more
+		return "", nil
+	}
+
+	if resp[:2] == mapi_MSG_QUPDATE {
+		lines := strings.Split(resp, "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, mapi_MSG_ERROR) {
+				return "", fmt.Errorf("QUPDATE error: %s", line[1:])
+			}
+		}
+	}
+
+	if strings.HasPrefix(resp, mapi_MSG_Q) || strings.HasPrefix(resp, mapi_MSG_HEADER) || strings.HasPrefix(resp, mapi_MSG_TUPLE) {
+		return resp, nil
+
+	} else if strings.HasPrefix(resp, mapi_MSG_ERROR) {
+		return "", fmt.Errorf("Operational error: %s", resp[1:])
+
+	} else if strings.HasPrefix(resp, mapi_MSG_INFO) {
+		log.Printf("Monet INFO: %s", resp[1:])
+		return "", nil
+
+	} else {
+		return "", fmt.Errorf("Unknown CMD state: %s", resp)
+	}
 }
