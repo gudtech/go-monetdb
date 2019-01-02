@@ -5,12 +5,14 @@
 package monetdb
 
 import (
+	"context"
 	"database/sql/driver"
-	"strconv"
-	"os"
-	"log"
 	"fmt"
+	"log"
+	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Conn struct {
@@ -68,19 +70,15 @@ func (c *Conn) execute(q string) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *Conn) CopyInto(tableName string, columns []string, channel chan []interface{}, rowCount int64) error {
+func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64) error {
 	if rowCount == 0 {
 		return fmt.Errorf("no rows")
 	}
-
-	fmt.Printf("row count: %d\n", rowCount)
 
 	if c.mapi.State != MAPI_STATE_READY {
 		return fmt.Errorf("Database not connected")
 	}
 
-	fmt.Printf("mapi state ready\n")
-	//var monetNull string = "mtwFTyme5SWmzgokt8Npopvr26XyaX7"
 	var monetNull string = "NULL"
 	query := fmt.Sprintf("sCOPY %d RECORDS INTO %s FROM STDIN (%s) USING DELIMITERS ',','\\n','\\\"' NULL AS '%s';", rowCount, tableName, strings.Join(columns, ", "), monetNull)
 
@@ -122,27 +120,28 @@ func (c *Conn) CopyInto(tableName string, columns []string, channel chan []inter
 	}()
 
 	counter := 0
+	bufferIndex := 0
+	var buffered [][]interface{}
 
-Receiving:
+Copy:
 	for {
-		//fmt.Printf("receiving from channel\n")
-		var row []interface{}
-		var more bool
-
 		select {
-		case row, more = <-channel:
-			//fmt.Printf("got from channel\n")
-			if !more {
-				//fmt.Printf("channel closed\n")
-				break Receiving
+		case <-ctx.Done():
+			break Copy
+		default:
+		}
+
+		if len(buffered) == 0 {
+			buffered = getFlushRecords()
+			bufferIndex = 0
+			if len(buffered) == 0 {
+				time.Sleep(time.Millisecond * 1)
+				continue Copy
 			}
-		case err, _ := <-streamEnded:
-			//fmt.Printf("stream ended\n")
-			return err
 		}
 
 		var convertedValues []string
-		for _, field := range row {
+		for _, field := range buffered[bufferIndex] {
 			converted, err := ConvertToMonet(field)
 			if err != nil {
 				return fmt.Errorf("conversion: %s", err)
@@ -155,7 +154,7 @@ Receiving:
 		block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
 		//fmt.Printf("putting block: %s\n", block)
 		counter += 1
-		if counter % 500 == 0 {
+		if counter%500 == 0 {
 			fmt.Fprintf(os.Stderr, "count: %d/%d\n", counter, rowCount)
 		}
 
