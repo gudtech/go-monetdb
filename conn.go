@@ -9,9 +9,10 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -70,7 +71,7 @@ func (c *Conn) execute(q string) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64) error {
+func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64, done *int64) error {
 	if rowCount == 0 {
 		return fmt.Errorf("no rows")
 	}
@@ -87,85 +88,99 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		return err
 	}
 
-	streamEnded := make(chan error)
+	flushCtx, cancel := context.WithCancel(ctx)
+	defer func() {
+		cancel()
+	}()
+
+	var errors []error
+	var errorMutex sync.Mutex
+	addErr := func(err error) {
+		errorMutex.Lock()
+		errors = append(errors, err)
+		errorMutex.Unlock()
+	}
+
 	go func() {
-		defer func() {
-			close(streamEnded)
-		}()
+		bufferIndex := 0
+		var buffered [][]interface{}
 
+	Copy:
 		for {
-			resp, err := c.handleGetBlock()
-			if err != nil {
-				streamEnded <- err
-				break
+			select {
+			case <-flushCtx.Done():
+				break Copy
+			default:
 			}
 
-			if resp != "" {
-				values := strings.Split(resp, " ")
-				integer, err := strconv.Atoi(values[1])
+			if len(buffered) == 0 {
+				buffered = getFlushRecords()
+				bufferIndex = 0
+				if len(buffered) == 0 {
+					time.Sleep(time.Millisecond * 1)
+					continue Copy
+				}
+			}
+
+			var convertedValues []string
+			for _, field := range buffered[bufferIndex] {
+				converted, err := ConvertToMonet(field)
 				if err != nil {
-					fmt.Printf("could not cast row count to integer (%s): %s\n", values[1], err)
+					err = fmt.Errorf("conversion: %s", err)
+					addErr(err)
+					return
 				}
 
-				if int64(integer) != rowCount {
-					fmt.Printf("\n\n!!!!!!!!!!!! ERROR: rowCount not the same as affected rows !!!!!!!!!!!!\n\n")
-				} else {
-					fmt.Printf("!!!!!!!!!!! probably fine !!!!!!!!!!!!!!!!!\n")
-				}
-
-				streamEnded <- nil
-				break
+				convertedValues = append(convertedValues, converted)
 			}
+
+			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
+
+			if err := c.mapi.putBlock([]byte(block)); err != nil {
+				addErr(err)
+				return
+			}
+
+			atomic.AddInt64(done, 1)
+		}
+
+		if err := c.mapi.putBlock([]byte("\x0D")); err != nil {
+			addErr(err)
+			return
 		}
 	}()
 
-	counter := 0
-	bufferIndex := 0
-	var buffered [][]interface{}
-
-Copy:
 	for {
-		select {
-		case <-ctx.Done():
-			break Copy
-		default:
-		}
-
-		if len(buffered) == 0 {
-			buffered = getFlushRecords()
-			bufferIndex = 0
-			if len(buffered) == 0 {
-				time.Sleep(time.Millisecond * 1)
-				continue Copy
+		errorMutex.Lock()
+		if len(errors) > 0 {
+			var errorStrings []string
+			for _, err := range errors {
+				errorStrings = append(errorStrings, err.Error())
 			}
-		}
-
-		var convertedValues []string
-		for _, field := range buffered[bufferIndex] {
-			converted, err := ConvertToMonet(field)
-			if err != nil {
-				return fmt.Errorf("conversion: %s", err)
-			}
-
-			//converted = strings.Replace(converted, "|", "", -1)
-			convertedValues = append(convertedValues, converted)
-		}
-
-		block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
-		//fmt.Printf("putting block: %s\n", block)
-		counter += 1
-		if counter%500 == 0 {
-			fmt.Fprintf(os.Stderr, "count: %d/%d\n", counter, rowCount)
-		}
-
-		if err := c.mapi.putBlock([]byte(block)); err != nil {
+			err := fmt.Errorf("%s", strings.Join(errorStrings, ", "))
+			errorMutex.Unlock()
 			return err
 		}
-	}
+		errorMutex.Unlock()
 
-	fmt.Printf("done\n")
-	if err := c.mapi.putBlock([]byte("\x0D")); err != nil {
-		return err
+		resp, err := c.handleGetBlock()
+		if err != nil {
+			return fmt.Errorf("get block for copy into: %s", err)
+		}
+
+		if resp != "" {
+			values := strings.Split(resp, " ")
+			integer, err := strconv.Atoi(values[1])
+			if err != nil {
+				return fmt.Errorf("not cast row count to integer (%s): %s", values[1], err)
+			}
+
+			if int64(integer) != rowCount {
+				return fmt.Errorf("rowCount not the same as affected rows: %d != %d", integer, rowCount)
+			} else {
+				return nil
+			}
+		}
 	}
 
 	return nil
