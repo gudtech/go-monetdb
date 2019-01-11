@@ -72,12 +72,16 @@ func (c *Conn) execute(q string) (string, error) {
 }
 
 func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64, done *int64) error {
-	if rowCount == 0 {
-		return fmt.Errorf("no rows")
+	if c.mapi == nil {
+		return "", fmt.Errorf("Database connection closed")
 	}
 
 	if c.mapi.State != MAPI_STATE_READY {
 		return fmt.Errorf("Database not connected")
+	}
+
+	if rowCount == 0 {
+		return fmt.Errorf("no rows")
 	}
 
 	var monetNull string = "NULL"
@@ -141,6 +145,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 				return
 			}
 
+			bufferIndex += 1
 			atomic.AddInt64(done, 1)
 		}
 
