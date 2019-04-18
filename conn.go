@@ -73,7 +73,7 @@ func (c *Conn) execute(q string) (string, error) {
 
 func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64, done *int64) error {
 	if c.mapi == nil {
-		return "", fmt.Errorf("Database connection closed")
+		return fmt.Errorf("Database connection closed")
 	}
 
 	if c.mapi.State != MAPI_STATE_READY {
@@ -87,15 +87,13 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 	var monetNull string = "NULL"
 	query := fmt.Sprintf("sCOPY %d RECORDS INTO %s FROM STDIN (%s) USING DELIMITERS ',','\\n','\\\"' NULL AS '%s';", rowCount, tableName, strings.Join(columns, ", "), monetNull)
 
-	fmt.Printf("put query: %s\n", query)
+	//fmt.Printf("put query: %s\n", query)
 	if err := c.mapi.putBlock([]byte(query)); err != nil {
 		return err
 	}
 
 	flushCtx, cancel := context.WithCancel(ctx)
-	defer func() {
-		cancel()
-	}()
+	defer cancel()
 
 	var errors []error
 	var errorMutex sync.Mutex
