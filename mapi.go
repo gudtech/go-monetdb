@@ -197,7 +197,7 @@ func (c *MapiConn) tryConnect() error {
 
 	tcpConn, _ := conn.(*net.TCPConn)
 
-	tcpConn.SetKeepAlive(true)
+	tcpConn.SetKeepAlive(false)
 	tcpConn.SetNoDelay(true)
 	c.conn = tcpConn
 
