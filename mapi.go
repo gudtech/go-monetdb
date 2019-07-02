@@ -168,7 +168,7 @@ func (c *MapiConn) Connect() error {
 	var err error
 
 	tries := 0
-	maxTries := 10
+	maxTries := 3
 	for tries < maxTries {
 		tries += 1
 
@@ -187,19 +187,19 @@ func (c *MapiConn) tryConnect() error {
 	}
 
 	addr := fmt.Sprintf("%s:%d", c.Hostname, c.Port)
-	raddr, err := net.ResolveTCPAddr("tcp", addr)
+	dialer := net.Dialer{
+		Timeout: time.Second * 10,
+	}
+	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("resolve monet tcp addr %s: %s", addr, err)
+		return fmt.Errorf("dial monet: %s", err)
 	}
 
-	conn, err := net.DialTCP("tcp", nil, raddr)
-	if err != nil {
-		return fmt.Errorf("dial monet tcp addr %s: %s", addr, err)
-	}
+	tcpConn, _ := conn.(*net.TCPConn)
 
-	conn.SetKeepAlive(true)
-	conn.SetNoDelay(true)
-	c.conn = conn
+	tcpConn.SetKeepAlive(true)
+	tcpConn.SetNoDelay(true)
+	c.conn = tcpConn
 
 	err = c.login()
 	if err != nil {
