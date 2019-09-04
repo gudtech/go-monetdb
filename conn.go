@@ -71,7 +71,7 @@ func (c *Conn) execute(q string) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64, done *int64) error {
+func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64, rowDone *int32) error {
 	if c.mapi == nil {
 		return fmt.Errorf("Database connection closed")
 	}
@@ -85,9 +85,8 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 	}
 
 	var monetNull string = "NULL"
-	query := fmt.Sprintf("sCOPY %d RECORDS INTO %s FROM STDIN (%s) USING DELIMITERS ',','\\n','\\\"' NULL AS '%s';", rowCount, tableName, strings.Join(columns, ", "), monetNull)
+	query := fmt.Sprintf("sCOPY %d RECORDS INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\\\"' NULL AS '%s';", rowCount, tableName, strings.Join(columns, ", "), monetNull)
 
-	//fmt.Printf("put query: %s\n", query)
 	if err := c.mapi.putBlock([]byte(query)); err != nil {
 		return err
 	}
@@ -103,7 +102,15 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		errorMutex.Unlock()
 	}
 
+	var put int32
+	var putDone int32
+	var received int32
+
 	go func() {
+		defer func() {
+			atomic.AddInt32(&putDone, 1)
+		}()
+
 		bufferIndex := 0
 		var buffered [][]interface{}
 
@@ -115,10 +122,14 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 			default:
 			}
 
-			if len(buffered) == 0 {
+			if bufferIndex >= len(buffered) {
 				buffered = getFlushRecords()
 				bufferIndex = 0
 				if len(buffered) == 0 {
+					if atomic.LoadInt32(rowDone) > 0 {
+						break Copy
+					}
+
 					time.Sleep(time.Millisecond * 1)
 					continue Copy
 				}
@@ -143,13 +154,8 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 				return
 			}
 
+			atomic.AddInt32(&put, 1)
 			bufferIndex += 1
-			atomic.AddInt64(done, 1)
-		}
-
-		if err := c.mapi.putBlock([]byte("\x0D")); err != nil {
-			addErr(err)
-			return
 		}
 	}()
 
@@ -166,24 +172,46 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		}
 		errorMutex.Unlock()
 
-		resp, err := c.handleGetBlock()
+		loadedPut := atomic.LoadInt32(&put)
+		if loadedPut == received {
+			// We are done and we have handled all of the blocks.
+			loadedPutDone := atomic.LoadInt32(&putDone)
+			if loadedPutDone > 0 {
+				break
+			}
+
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
+
+		_, err := c.handleGetBlock()
 		if err != nil {
 			return fmt.Errorf("get block for copy into: %s", err)
 		}
 
-		if resp != "" {
-			values := strings.Split(resp, " ")
-			integer, err := strconv.Atoi(values[1])
-			if err != nil {
-				return fmt.Errorf("not cast row count to integer (%s): %s", values[1], err)
-			}
+		received += 1
+	}
 
-			if int64(integer) != rowCount {
-				return fmt.Errorf("rowCount not the same as affected rows: %d != %d", integer, rowCount)
-			} else {
-				return nil
-			}
-		}
+	// Carriage return signals end of file?
+	if err := c.mapi.putBlock([]byte("\x0D")); err != nil {
+		return err
+	}
+
+	resp, err := c.handleGetBlock()
+	if err != nil {
+		return fmt.Errorf("get block for copy into: %s", err)
+	}
+
+	values := strings.Split(resp, " ")
+	integer, err := strconv.Atoi(values[1])
+	if err != nil {
+		return fmt.Errorf("not cast row count to integer (%s): %s", values[1], err)
+	}
+
+	if int64(integer) != rowCount {
+		return fmt.Errorf("rowCount not the same as affected rows: %d != %d", integer, rowCount)
+	} else {
+		return nil
 	}
 
 	return nil
@@ -195,8 +223,6 @@ func (c *Conn) handleGetBlock() (string, error) {
 		return "", err
 	}
 
-	//fmt.Printf("block: %s\n", r)
-
 	resp := string(r)
 	if len(resp) == 0 {
 		return "", nil
@@ -205,7 +231,6 @@ func (c *Conn) handleGetBlock() (string, error) {
 		return "", nil
 
 	} else if resp == mapi_MSG_MORE {
-		// tell server it isn't going to get more
 		return "", nil
 	}
 

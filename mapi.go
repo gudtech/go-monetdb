@@ -165,20 +165,12 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 
 // Connect starts a MAPI connection to MonetDB server.
 func (c *MapiConn) Connect() error {
-	var err error
-
-	tries := 0
-	maxTries := 3
-	for tries < maxTries {
-		tries += 1
-
-		err = c.tryConnect()
-		if err == nil {
-			break
-		}
+	err := c.tryConnect()
+	if err == nil {
+		return err
 	}
 
-	return err
+	return nil
 }
 
 func (c *MapiConn) tryConnect() error {
@@ -406,6 +398,9 @@ func (c *MapiConn) ping() error {
 
 // putBlock sends the given data as one or more blocks
 func (c *MapiConn) putBlock(b []byte) error {
+	if c == nil {
+		return fmt.Errorf("mapi connection is nil")
+	}
 	//err := c.ping()
 	//if err != nil {
 	//return err
@@ -432,9 +427,14 @@ func (c *MapiConn) putBlock(b []byte) error {
 			return fmt.Errorf("pack flag: %s", err)
 		}
 
+		if flag == nil || flag.Bytes() == nil {
+			return fmt.Errorf("flag is nil")
+		}
+
 		if _, err := c.conn.Write(flag.Bytes()); err != nil {
 			return fmt.Errorf("write flag: %s", err)
 		}
+
 		if _, err := c.conn.Write(data); err != nil {
 			return fmt.Errorf("write data: %s", err)
 		}
