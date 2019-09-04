@@ -84,6 +84,12 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		return fmt.Errorf("no rows")
 	}
 
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	var monetNull string = "NULL"
 	query := fmt.Sprintf("sCOPY %d RECORDS INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\\\"' NULL AS '%s';", rowCount, tableName, strings.Join(columns, ", "), monetNull)
 
@@ -171,6 +177,12 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 			return err
 		}
 		errorMutex.Unlock()
+
+		select {
+		case <-flushCtx.Done():
+			return flushCtx.Err()
+		default:
+		}
 
 		loadedPut := atomic.LoadInt32(&put)
 		if loadedPut == received {
