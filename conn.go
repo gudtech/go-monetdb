@@ -71,7 +71,7 @@ func (c *Conn) execute(q string) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount int64, rowDone *int32) error {
+func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount *int64, rowDone *int32) error {
 	if c.mapi == nil {
 		return fmt.Errorf("Database connection closed")
 	}
@@ -80,7 +80,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		return fmt.Errorf("Database not connected")
 	}
 
-	if rowCount == 0 {
+	if rowCount != nil && *rowCount == 0 {
 		return fmt.Errorf("no rows")
 	}
 
@@ -90,8 +90,13 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 	default:
 	}
 
+	recordsString := ""
+	if rowCount != nil {
+		recordsString = fmt.Sprintf("%d RECORDS", *rowCount)
+	}
+
 	var monetNull string = "NULL"
-	query := fmt.Sprintf("sCOPY %d RECORDS INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\\\"' NULL AS '%s';", rowCount, tableName, strings.Join(columns, ", "), monetNull)
+	query := fmt.Sprintf("sCOPY %s INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\\\"' NULL AS '%s';", recordsString, tableName, strings.Join(columns, ", "), monetNull)
 
 	if err := c.mapi.putBlock([]byte(query)); err != nil {
 		return err
@@ -221,10 +226,12 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		return fmt.Errorf("not cast row count to integer (%s): %s", values[1], err)
 	}
 
-	if int64(integer) != rowCount {
-		return fmt.Errorf("rowCount not the same as affected rows: %d != %d", integer, rowCount)
-	} else {
-		return nil
+	if rowCount != nil {
+		if int64(integer) != *rowCount {
+			return fmt.Errorf("rowCount not the same as affected rows: %d != %d", integer, *rowCount)
+		} else {
+			return nil
+		}
 	}
 
 	return nil
