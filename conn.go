@@ -95,7 +95,8 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		recordsString = fmt.Sprintf("%d RECORDS", *rowCount)
 	}
 
-	var monetNull string = "NULL"
+	// Some random string to avoid collisions.
+	var monetNull string = "8AjzIuem9Pa01J2MaodLqpzLM387a"
 	query := fmt.Sprintf("sCOPY %s INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\\\"' NULL AS '%s';", recordsString, tableName, strings.Join(columns, ", "), monetNull)
 
 	if err := c.mapi.putBlock([]byte(query)); err != nil {
@@ -148,7 +149,8 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 
 			var convertedValues []string
 			for _, field := range buffered[bufferIndex] {
-				converted, err := ConvertToMonet(field)
+				// For whatever reason monet does not like single quotes for this.
+				converted, err := CopyIntoConvertToMonet(field)
 				if err != nil {
 					err = fmt.Errorf("conversion: %s", err)
 					addErr(err)
@@ -158,6 +160,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 				convertedValues = append(convertedValues, converted)
 			}
 
+			log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, ","))
 			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
 
 			if err := c.mapi.putBlock([]byte(block)); err != nil {

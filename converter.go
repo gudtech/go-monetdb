@@ -232,12 +232,23 @@ func toString(v driver.Value) (string, error) {
 func toQuotedString(v driver.Value) (string, error) {
 	s := fmt.Sprintf("%v", v)
 	s = strings.Replace(s, "\\", "\\\\", -1)
+	s = strings.Replace(s, "'", "\\'", -1)
+	return fmt.Sprintf("'%v'", s), nil
+}
+
+func toCopyIntoQuotedString(v driver.Value) (string, error) {
+	s := fmt.Sprintf("%v", v)
+	s = strings.Replace(s, "\\", "\\\\", -1)
 	s = strings.Replace(s, "\"", "\\\"", -1)
 	return fmt.Sprintf("\"%v\"", s), nil
 }
 
 func toNull(v driver.Value) (string, error) {
 	return "NULL", nil
+}
+
+func toCopyIntoNull(v driver.Value) (string, error) {
+	return "8AjzIuem9Pa01J2MaodLqpzLM387a", nil
 }
 
 func toByteString(v driver.Value) (string, error) {
@@ -249,12 +260,32 @@ func toByteString(v driver.Value) (string, error) {
 	}
 }
 
+func toCopyIntoByteString(v driver.Value) (string, error) {
+	switch val := v.(type) {
+	case []uint8:
+		return toCopyIntoQuotedString(string(val))
+	default:
+		return "", fmt.Errorf("Unsupported type")
+	}
+}
+
 func toDateTimeString(v driver.Value) (string, error) {
 	switch val := v.(type) {
 	case Time:
 		return toQuotedString(fmt.Sprintf("%02d:%02d:%02d", val.Hour, val.Min, val.Sec))
 	case Date:
 		return toQuotedString(fmt.Sprintf("%04d-%02d-%02d", val.Year, val.Month, val.Day))
+	default:
+		return "", fmt.Errorf("Unsupported type")
+	}
+}
+
+func toCopyIntoDateTimeString(v driver.Value) (string, error) {
+	switch val := v.(type) {
+	case Time:
+		return toCopyIntoQuotedString(fmt.Sprintf("%02d:%02d:%02d", val.Hour, val.Min, val.Sec))
+	case Date:
+		return toCopyIntoQuotedString(fmt.Sprintf("%04d-%02d-%02d", val.Year, val.Month, val.Day))
 	default:
 		return "", fmt.Errorf("Unsupported type")
 	}
@@ -278,6 +309,24 @@ var toMonetMappers = map[string]toMonetConverter{
 	"monetdb.Date": toDateTimeString,
 }
 
+var toCopyIntoMonetMappers = map[string]toMonetConverter{
+	"int":          toString,
+	"int8":         toString,
+	"int16":        toString,
+	"int32":        toString,
+	"int64":        toString,
+	"float":        toString,
+	"float32":      toString,
+	"float64":      toString,
+	"bool":         toString,
+	"string":       toCopyIntoQuotedString,
+	"nil":          toCopyIntoNull,
+	"[]uint8":      toCopyIntoByteString,
+	"time.Time":    toCopyIntoQuotedString,
+	"monetdb.Time": toCopyIntoDateTimeString,
+	"monetdb.Date": toCopyIntoDateTimeString,
+}
+
 func convertToGo(value, dataType string) (driver.Value, error) {
 	if mapper, ok := toGoMappers[dataType]; ok {
 		value := strings.TrimSpace(value)
@@ -294,6 +343,19 @@ func ConvertToMonet(value driver.Value) (string, error) {
 	}
 
 	if mapper, ok := toMonetMappers[n]; ok {
+		return mapper(value)
+	}
+	return "", fmt.Errorf("Type not supported: %v", t)
+}
+
+func CopyIntoConvertToMonet(value driver.Value) (string, error) {
+	t := reflect.TypeOf(value)
+	n := "nil"
+	if t != nil {
+		n = t.String()
+	}
+
+	if mapper, ok := toCopyIntoMonetMappers[n]; ok {
 		return mapper(value)
 	}
 	return "", fmt.Errorf("Type not supported: %v", t)
