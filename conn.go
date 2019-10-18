@@ -160,7 +160,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 				convertedValues = append(convertedValues, converted)
 			}
 
-			log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, ","))
+			//log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, ","))
 			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
 
 			if err := c.mapi.putBlock([]byte(block)); err != nil {
