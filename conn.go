@@ -71,7 +71,51 @@ func (c *Conn) execute(q string) (string, error) {
 	return c.cmd(cmd)
 }
 
-func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount *int64, rowDone *int32) error {
+type CopyIntoProgress struct {
+	rowsSent  int64
+	rowsAcked int64
+
+	finishedSending int32
+}
+
+func NewCopyIntoProgress() *CopyIntoProgress {
+	return &CopyIntoProgress{
+		rowsSent:        0,
+		rowsAcked:       0,
+		finishedSending: 0,
+	}
+}
+
+func (progress *CopyIntoProgress) RowsSent() int64 {
+	return atomic.LoadInt64(&progress.rowsSent)
+}
+
+func (progress *CopyIntoProgress) RowsAcked() int64 {
+	return atomic.LoadInt64(&progress.rowsAcked)
+}
+
+func (progress *CopyIntoProgress) incrementSent() {
+	if progress == nil {
+		return
+	}
+	atomic.AddInt64(&progress.rowsSent, 1)
+}
+
+func (progress *CopyIntoProgress) incrementAcked() {
+	if progress == nil {
+		return
+	}
+	atomic.AddInt64(&progress.rowsAcked, 1)
+}
+
+func (progress *CopyIntoProgress) finishSending() {
+	if progress == nil {
+		return
+	}
+	atomic.AddInt32(&progress.finishedSending, 1)
+}
+
+func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount *int64, rowDone *int32, progress *CopyIntoProgress) error {
 	if c.mapi == nil {
 		return fmt.Errorf("Database connection closed")
 	}
@@ -121,6 +165,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 	go func() {
 		defer func() {
 			atomic.AddInt32(&putDone, 1)
+			progress.finishSending()
 		}()
 
 		bufferIndex := 0
@@ -163,7 +208,10 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 			//log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, ","))
 			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
 
-			if err := c.mapi.putBlock([]byte(block)); err != nil {
+			err := c.mapi.putBlock([]byte(block))
+			progress.incrementSent()
+
+			if err != nil {
 				err = fmt.Errorf("put converted block: %v", err)
 				addErr(err)
 				return
@@ -206,6 +254,8 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		}
 
 		_, err := c.handleGetBlock()
+		progress.incrementAcked()
+
 		if err != nil {
 			return fmt.Errorf("get block for copy into: %s", err)
 		}
