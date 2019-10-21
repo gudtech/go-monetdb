@@ -12,6 +12,9 @@ import (
 	"strconv"
 )
 
+// Switch to true to see more information.
+var DEBUG_MODE bool = false
+
 func init() {
 	sql.Register("monetdb", &Driver{})
 }

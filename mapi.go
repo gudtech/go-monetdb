@@ -363,12 +363,25 @@ func (c *MapiConn) getBytes(count int) ([]byte, error) {
 	for read < count {
 		b := make([]byte, count-read)
 
-		c.conn.SetDeadline(time.Now().Add(30 * time.Second))
+		deadlineErr := c.conn.SetDeadline(time.Now().Add(300 * time.Second))
+		if deadlineErr != nil {
+			return nil, fmt.Errorf("enable deadline: %s", deadlineErr)
+		}
+
 		n, err := c.conn.Read(b)
+
+		// Disable deadline after we read something so we don't timeout the next time
+		// if we idle for too long.
+		deadlineErr = c.conn.SetDeadline(time.Time{})
+		if deadlineErr != nil {
+			return nil, fmt.Errorf("disable deadline: %s", deadlineErr)
+		}
+
 		if err != nil {
 			r.Write(b)
 			return nil, err
 		}
+
 		//copy(r[read:], b[:n])
 		r.Write(b)
 		read += n

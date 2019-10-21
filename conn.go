@@ -115,6 +115,9 @@ func (progress *CopyIntoProgress) finishSending() {
 	atomic.AddInt32(&progress.finishedSending, 1)
 }
 
+// Some random string to avoid collisions.
+var MONET_NULL string = "AjzI8uEM9p82Pl"
+
 func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string, getFlushRecords func() [][]interface{}, rowCount *int64, rowDone *int32, progress *CopyIntoProgress) error {
 	if c.mapi == nil {
 		return fmt.Errorf("Database connection closed")
@@ -139,9 +142,11 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		recordsString = fmt.Sprintf("%d RECORDS", *rowCount)
 	}
 
-	// Some random string to avoid collisions.
-	var monetNull string = "8AjzIuem9Pa01J2MaodLqpzLM387a"
-	query := fmt.Sprintf("sCOPY %s INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\\\"' NULL AS '%s';", recordsString, tableName, strings.Join(columns, ", "), monetNull)
+	query := fmt.Sprintf("sCOPY %s INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\"' NULL AS '%s';", recordsString, tableName, strings.Join(columns, ","), MONET_NULL)
+
+	if DEBUG_MODE {
+		log.Printf("query: %s", query)
+	}
 
 	if err := c.mapi.putBlock([]byte(query)); err != nil {
 		return err
@@ -205,7 +210,10 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 				convertedValues = append(convertedValues, converted)
 			}
 
-			//log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, ","))
+			if DEBUG_MODE {
+				log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, ","))
+			}
+
 			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
 
 			err := c.mapi.putBlock([]byte(block))
