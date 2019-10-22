@@ -153,7 +153,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		recordsString = fmt.Sprintf("%d RECORDS", *rowCount)
 	}
 
-	query := fmt.Sprintf("COPY %s INTO %s FROM STDIN (%s) USING DELIMITERS '|', '\\n', '\"' NULL AS '%s'", recordsString, tableName, strings.Join(columns, ","), MONET_NULL)
+	query := fmt.Sprintf("COPY %s INTO %s FROM STDIN (%s) USING DELIMITERS '|', '|\\n', '\"' NULL AS '%s'", recordsString, tableName, strings.Join(columns, ","), MONET_NULL)
 	cmd := formatQuery(query)
 
 	if DEBUG_MODE {
@@ -223,10 +223,10 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 			}
 
 			if DEBUG_MODE {
-				log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, "|"))
+				log.Printf("copy into table %s: %v|", tableName, strings.Join(convertedValues, "|"))
 			}
 
-			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, "|"))
+			block := fmt.Sprintf("%s|\n", strings.Join(convertedValues, "|"))
 
 			err := c.mapi.putBlock([]byte(block))
 			progress.incrementSent()
@@ -261,11 +261,11 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		default:
 		}
 
+		loadedPutDone := atomic.LoadInt32(&putDone)
 		loadedPut := atomic.LoadInt32(&put)
 		if loadedPut == received {
-			// We are done and we have handled all of the blocks.
-			loadedPutDone := atomic.LoadInt32(&putDone)
 			if loadedPutDone > 0 {
+				// We are done and we have handled all of the blocks.
 				break
 			}
 
@@ -281,7 +281,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		}
 
 		if !more {
-			return fmt.Errorf("server did not want more")
+			break
 		}
 
 		received += 1
@@ -292,7 +292,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		return err
 	}
 
-	resp, err := c.getEndResponse()
+	resp, err := c.getEndResponse(0)
 	if err != nil {
 		return fmt.Errorf("get block for copy into: %s", err)
 	}
@@ -323,7 +323,10 @@ func (c *Conn) handleCopyIntoBlock() (bool, error) {
 
 	debugMsg := func(msg string) {
 		if DEBUG_MODE {
-			log.Printf("getBlock (%s): '%s'", msg, r)
+			received := string(r)
+			received = strings.Replace(received, "\r", "\\r", -1)
+			received = strings.Replace(received, "\n", "\\n", -1)
+			log.Printf("getBlock (%s): '%s'", msg, received)
 		}
 	}
 
@@ -337,7 +340,12 @@ func (c *Conn) handleCopyIntoBlock() (bool, error) {
 		return false, nil
 
 	} else if resp == mapi_MSG_MORE {
-		debugMsg("MSG_MORE")
+		debugMsg(fmt.Sprintf("MSG_MORE %v", []byte(resp)))
+		if resp == "\n" {
+			debugMsg("MSG_MORE_END")
+			return false, nil
+		}
+
 		return true, nil
 	}
 
@@ -370,7 +378,7 @@ func (c *Conn) handleCopyIntoBlock() (bool, error) {
 	}
 }
 
-func (c *Conn) getEndResponse() (string, error) {
+func (c *Conn) getEndResponse(iterations int) (string, error) {
 	r, err := c.mapi.getBlock()
 	if err != nil {
 		return "", err
@@ -378,7 +386,10 @@ func (c *Conn) getEndResponse() (string, error) {
 
 	debugMsg := func(msg string) {
 		if DEBUG_MODE {
-			log.Printf("getBlock (%s): '%s'", msg, r)
+			received := string(r)
+			received = strings.Replace(received, "\r", "\\r", -1)
+			received = strings.Replace(received, "\n", "\\n", -1)
+			log.Printf("getBlock (%s): '%s'", msg, received)
 		}
 	}
 
@@ -392,8 +403,10 @@ func (c *Conn) getEndResponse() (string, error) {
 		return "", nil
 
 	} else if resp == mapi_MSG_MORE {
-		debugMsg("MSG_MORE")
-		return "", nil
+		debugMsg(fmt.Sprintf("MSG_MORE %v", []byte(resp)))
+		// newline is acknowledgement of end of stream from server.
+		// we might hit this case if the server expected more than it got
+		return "", fmt.Errorf("server wants more")
 	}
 
 	if resp[:2] == mapi_MSG_QUPDATE {

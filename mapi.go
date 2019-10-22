@@ -352,7 +352,10 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 	}
 
 	if RAW_MODE {
-		fmt.Printf("RAW receive: '%s'\n", r.String())
+		received := r.String()
+		received = strings.Replace(received, "\r", "\\r", -1)
+		received = strings.Replace(received, "\n", "\\n", -1)
+		fmt.Printf("RAW receive: '%s'\n", received)
 	}
 
 	return r.Bytes(), nil
@@ -420,7 +423,10 @@ func (c *MapiConn) putBlock(b []byte) error {
 	}
 
 	if RAW_MODE {
-		fmt.Printf("RAW send: '%s'\n", string(b))
+		sent := string(b)
+		sent = strings.Replace(sent, "\r", "\\r", -1)
+		sent = strings.Replace(sent, "\n", "\\n", -1)
+		fmt.Printf("RAW send: '%s'\n", sent)
 	}
 
 	pos := 0
