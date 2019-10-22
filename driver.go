@@ -15,6 +15,9 @@ import (
 // Switch to true to see more information.
 var DEBUG_MODE bool = false
 
+// See exactly what we are sending/receiving from monet.
+var RAW_MODE bool = false
+
 func init() {
 	sql.Register("monetdb", &Driver{})
 }

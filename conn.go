@@ -66,8 +66,19 @@ func (c *Conn) cmd(cmd string) (string, error) {
 	return c.mapi.Cmd(cmd)
 }
 
+func formatQuery(query string) string {
+	// Minor differences between `s` and `S` here, not entirely sure what.
+	var cmd strings.Builder
+	cmd.WriteString("S") // SQL
+	cmd.WriteString(query)
+	// Newlines seem to be used here in most official drivers as well, so
+	// going to follow that convention.
+	cmd.WriteString("\n;\n")
+	return cmd.String()
+}
+
 func (c *Conn) execute(q string) (string, error) {
-	cmd := fmt.Sprintf("s%s;", q)
+	cmd := formatQuery(q)
 	return c.cmd(cmd)
 }
 
@@ -142,13 +153,14 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		recordsString = fmt.Sprintf("%d RECORDS", *rowCount)
 	}
 
-	query := fmt.Sprintf("sCOPY %s INTO %s FROM STDIN (%s) USING DELIMITERS ',', '\\n', '\"' NULL AS '%s';", recordsString, tableName, strings.Join(columns, ","), MONET_NULL)
+	query := fmt.Sprintf("COPY %s INTO %s FROM STDIN (%s) USING DELIMITERS '|', '\\n', '\"' NULL AS '%s'", recordsString, tableName, strings.Join(columns, ","), MONET_NULL)
+	cmd := formatQuery(query)
 
 	if DEBUG_MODE {
 		log.Printf("query: %s", query)
 	}
 
-	if err := c.mapi.putBlock([]byte(query)); err != nil {
+	if err := c.mapi.putBlock([]byte(cmd)); err != nil {
 		return err
 	}
 
@@ -211,10 +223,10 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 			}
 
 			if DEBUG_MODE {
-				log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, ","))
+				log.Printf("copy into table %s: %v", tableName, strings.Join(convertedValues, "|"))
 			}
 
-			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, ","))
+			block := fmt.Sprintf("%s\n", strings.Join(convertedValues, "|"))
 
 			err := c.mapi.putBlock([]byte(block))
 			progress.incrementSent()
@@ -261,11 +273,15 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 			continue
 		}
 
-		_, err := c.handleGetBlock()
+		more, err := c.handleCopyIntoBlock()
 		progress.incrementAcked()
 
 		if err != nil {
 			return fmt.Errorf("get block for copy into: %s", err)
+		}
+
+		if !more {
+			return fmt.Errorf("server did not want more")
 		}
 
 		received += 1
@@ -276,7 +292,7 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		return err
 	}
 
-	resp, err := c.handleGetBlock()
+	resp, err := c.getEndResponse()
 	if err != nil {
 		return fmt.Errorf("get block for copy into: %s", err)
 	}
@@ -298,24 +314,90 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 	return nil
 }
 
-func (c *Conn) handleGetBlock() (string, error) {
+// Returns whether to continue sending
+func (c *Conn) handleCopyIntoBlock() (bool, error) {
+	r, err := c.mapi.getBlock()
+	if err != nil {
+		return false, err
+	}
+
+	debugMsg := func(msg string) {
+		if DEBUG_MODE {
+			log.Printf("getBlock (%s): '%s'", msg, r)
+		}
+	}
+
+	resp := string(r)
+	if len(resp) == 0 {
+		debugMsg("empty")
+		return false, nil
+
+	} else if strings.HasPrefix(resp, mapi_MSG_OK) {
+		debugMsg("MSG_OK")
+		return false, nil
+
+	} else if resp == mapi_MSG_MORE {
+		debugMsg("MSG_MORE")
+		return true, nil
+	}
+
+	if resp[:2] == mapi_MSG_QUPDATE {
+		debugMsg("MSG_QUPDATE")
+		lines := strings.Split(resp, "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, mapi_MSG_ERROR) {
+				return false, fmt.Errorf("QUPDATE error: %s", line[1:])
+			}
+		}
+	}
+
+	if strings.HasPrefix(resp, mapi_MSG_Q) || strings.HasPrefix(resp, mapi_MSG_HEADER) || strings.HasPrefix(resp, mapi_MSG_TUPLE) {
+		debugMsg("MSG_Q/HEADER/TUPLE")
+		return false, nil
+
+	} else if strings.HasPrefix(resp, mapi_MSG_ERROR) {
+		debugMsg("MSG_ERROR")
+		return false, fmt.Errorf("Operational error: %s", resp[1:])
+
+	} else if strings.HasPrefix(resp, mapi_MSG_INFO) {
+		debugMsg("MSG_INFO")
+		log.Printf("Monet INFO: %s", resp[1:])
+		return false, nil
+
+	} else {
+		debugMsg("UNKNOWN")
+		return false, fmt.Errorf("Unknown CMD state: %s", resp)
+	}
+}
+
+func (c *Conn) getEndResponse() (string, error) {
 	r, err := c.mapi.getBlock()
 	if err != nil {
 		return "", err
 	}
 
+	debugMsg := func(msg string) {
+		if DEBUG_MODE {
+			log.Printf("getBlock (%s): '%s'", msg, r)
+		}
+	}
+
 	resp := string(r)
 	if len(resp) == 0 {
+		debugMsg("empty")
 		return "", nil
 
 	} else if strings.HasPrefix(resp, mapi_MSG_OK) {
+		debugMsg("MSG_OK")
 		return "", nil
 
 	} else if resp == mapi_MSG_MORE {
+		debugMsg("MSG_MORE")
 		return "", nil
 	}
 
 	if resp[:2] == mapi_MSG_QUPDATE {
+		debugMsg("MSG_QUPDATE")
 		lines := strings.Split(resp, "\n")
 		for _, line := range lines {
 			if strings.HasPrefix(line, mapi_MSG_ERROR) {
@@ -325,16 +407,20 @@ func (c *Conn) handleGetBlock() (string, error) {
 	}
 
 	if strings.HasPrefix(resp, mapi_MSG_Q) || strings.HasPrefix(resp, mapi_MSG_HEADER) || strings.HasPrefix(resp, mapi_MSG_TUPLE) {
+		debugMsg("MSG_Q/HEADER/TUPLE")
 		return resp, nil
 
 	} else if strings.HasPrefix(resp, mapi_MSG_ERROR) {
+		debugMsg("MSG_ERROR")
 		return "", fmt.Errorf("Operational error: %s", resp[1:])
 
 	} else if strings.HasPrefix(resp, mapi_MSG_INFO) {
+		debugMsg("MSG_INFO")
 		log.Printf("Monet INFO: %s", resp[1:])
 		return "", nil
 
 	} else {
+		debugMsg("UNKNOWN")
 		return "", fmt.Errorf("Unknown CMD state: %s", resp)
 	}
 }

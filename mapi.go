@@ -351,6 +351,10 @@ func (c *MapiConn) getBlock() ([]byte, error) {
 		r.Write(d)
 	}
 
+	if RAW_MODE {
+		fmt.Printf("RAW receive: '%s'\n", r.String())
+	}
+
 	return r.Bytes(), nil
 }
 
@@ -414,10 +418,10 @@ func (c *MapiConn) putBlock(b []byte) error {
 	if c == nil {
 		return fmt.Errorf("mapi connection is nil")
 	}
-	//err := c.ping()
-	//if err != nil {
-	//return err
-	//}
+
+	if RAW_MODE {
+		fmt.Printf("RAW send: '%s'\n", string(b))
+	}
 
 	pos := 0
 	last := 0

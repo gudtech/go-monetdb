@@ -239,7 +239,7 @@ func toQuotedString(v driver.Value) (string, error) {
 func toCopyIntoQuotedString(v driver.Value) (string, error) {
 	s := fmt.Sprintf("%v", v)
 	s = strings.Replace(s, "\\", "\\\\", -1)
-	// Seems we need to double backslashes for COPY INTO strings?
+	s = strings.Replace(s, "\n", "\\n", -1)
 	s = strings.Replace(s, "\"", "\\\"", -1)
 	return fmt.Sprintf("\"%v\"", s), nil
 }
