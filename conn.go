@@ -287,9 +287,11 @@ func (c *Conn) CopyInto(ctx context.Context, tableName string, columns []string,
 		received += 1
 	}
 
-	// Carriage return signals end of file?
-	if err := c.mapi.putBlock([]byte("\x0D")); err != nil {
-		return err
+	if rowCount == nil {
+		// Carriage return signals end of file?
+		if err := c.mapi.putBlock([]byte("\x0D")); err != nil {
+			return err
+		}
 	}
 
 	resp, err := c.getEndResponse(0)
