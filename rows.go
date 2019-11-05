@@ -75,14 +75,18 @@ func (r *Rows) Next(dest []driver.Value) error {
 	}
 
 	for i, v := range r.rows[r.rowNum-r.offset] {
+		if i >= len(dest) {
+			return fmt.Errorf("received more rows than expected: got %d, expected %d", i, len(dest))
+		}
+
 		if vv, ok := v.(string); ok {
 			dest[i] = []byte(vv)
 		} else {
 			dest[i] = v
 		}
 	}
-	r.rowNum += 1
 
+	r.rowNum += 1
 	return nil
 }
 
