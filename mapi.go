@@ -128,38 +128,70 @@ func (c *MapiConn) Cmd(operation string) (string, error) {
 	}
 
 	resp := string(r)
+	information, err := HandleBlock(resp)
+
+	if information.More {
+		// tell server it isn't going to get more
+		response, err = c.Cmd("")
+		return BlockInformation{Response: response}, err
+	}
+
+	return information.Response, err
+}
+
+type BlockInformation struct {
+	Response string
+	More     bool
+}
+
+func HandleBlock(resp string) (string, error) {
+	debugMsg := func(msg string) {
+		if DEBUG_MODE {
+			received := string(r)
+			received = strings.Replace(received, "\r", "\\r", -1)
+			received = strings.Replace(received, "\n", "\\n", -1)
+			log.Printf("getBlock (%s): '%s'", msg, received)
+		}
+	}
+
 	if len(resp) == 0 {
-		return "", nil
+		debugMsg("empty")
+		return BlockInformation{}, nil
 
 	} else if strings.HasPrefix(resp, mapi_MSG_OK) {
-		return strings.TrimSpace(resp[3:]), nil
+		debugMsg("MSG_OK")
+		return BlockInformation{Response: strings.TrimSpace(resp[3:])}, nil
 
 	} else if resp == mapi_MSG_MORE {
-		// tell server it isn't going to get more
-		return c.Cmd("")
+		debugMsg(fmt.Sprintf("MSG_MORE %v", []byte(resp)))
+		return BlockInformation{More: true}, nil
 	}
 
 	if resp[:2] == mapi_MSG_QUPDATE {
+		debugMsg("MSG_QUPDATE")
 		lines := strings.Split(resp, "\n")
 		for _, line := range lines {
 			if strings.HasPrefix(line, mapi_MSG_ERROR) {
-				return "", fmt.Errorf("QUPDATE error: %s", line[1:])
+				return BlockInformation{}, fmt.Errorf("QUPDATE error: %s", line[1:])
 			}
 		}
 	}
 
 	if strings.HasPrefix(resp, mapi_MSG_Q) || strings.HasPrefix(resp, mapi_MSG_HEADER) || strings.HasPrefix(resp, mapi_MSG_TUPLE) {
-		return resp, nil
+		debugMsg("MSG_Q/HEADER/TUPLE")
+		return BlockInformation{Response: resp}, nil
 
 	} else if strings.HasPrefix(resp, mapi_MSG_ERROR) {
-		return "", fmt.Errorf("Operational error: %s", resp[1:])
+		debugMsg("MSG_ERROR")
+		return BlockInformation{}, fmt.Errorf("Operational error: %s", resp[1:])
 
 	} else if strings.HasPrefix(resp, mapi_MSG_INFO) {
+		debugMsg("MSG_INFO")
 		log.Printf("Monet INFO: %s", resp[1:])
-		return resp[1:], nil
-
+		return BlockInformation{Response: resp[1:]}, nil
 	} else {
-		return "", fmt.Errorf("Unknown CMD state: %s", resp)
+		debugMsg("UNKNOWN")
+		return BlockInformation{}, fmt.Errorf("Unknown CMD state: %s", resp)
 	}
 }
 
